@@ -1,9 +1,42 @@
 package clkup
 
+import (
+	"bytes"
+	"encoding/json"
+)
+
+// types generated through https://quicktype.io/ with minor modification for duplicate definitions
+
 // response types
+
+type FlexID string
+
+// clickup IDs are inconsistently typed so this ensures the value always unmarshalls correctly
+func (fid *FlexID) UnmarshalJSON(b []byte) error {
+	if bytes.Equal(b, []byte("null")) {
+		return nil
+	}
+
+	if len(b) > 0 && b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*fid = FlexID(s)
+		return nil
+	}
+
+	*fid = FlexID(b)
+	return nil
+}
 
 type UserResponse struct {
 	User User `json:"user"`
+}
+
+type PlanResponse struct {
+	PlanName string `json:"plan_name"`
+	PlanID   int    `json:"plan_id"`
 }
 
 type TeamsResponse struct {
@@ -29,7 +62,7 @@ type TasksResponse struct {
 // hierarchy types
 
 type Workspace struct {
-	ID      string   `json:"id"`
+	ID      FlexID   `json:"id"`
 	Name    string   `json:"name"`
 	Color   string   `json:"color"`
 	Avatar  string   `json:"avatar"`
@@ -37,7 +70,7 @@ type Workspace struct {
 }
 
 type Space struct {
-	ID                string        `json:"id"`
+	ID                FlexID        `json:"id"`
 	Name              string        `json:"name"`
 	Private           bool          `json:"private"`
 	Color             string        `json:"color"`
@@ -51,7 +84,7 @@ type Space struct {
 }
 
 type Folder struct {
-	ID               string        `json:"id"`
+	ID               FlexID        `json:"id"`
 	Name             string        `json:"name"`
 	Orderindex       int64         `json:"orderindex"`
 	OverrideStatuses bool          `json:"override_statuses"`
@@ -62,14 +95,14 @@ type Folder struct {
 }
 
 type List struct {
-	ID               string         `json:"id"`
+	ID               FlexID         `json:"id"`
 	Name             string         `json:"name"`
 	Orderindex       int64          `json:"orderindex"`
 	Content          string         `json:"content"`
 	Status           Status         `json:"status"`
 	Priority         Priority       `json:"priority"`
-	Assignee         string         `json:"assignee"`
-	TaskCount        string         `json:"task_count"`
+	Assignee         FlexID         `json:"assignee"`
+	TaskCount        int            `json:"task_count"`
 	DueDate          string         `json:"due_date"`
 	StartDate        string         `json:"start_date"`
 	Folder           FolderLocation `json:"folder"`
@@ -83,7 +116,7 @@ type Task struct {
 	Points          any            `json:"points"`
 	DateDone        any            `json:"date_done"`
 	GroupAssignees  []any          `json:"group_assignees"`
-	Id              string         `json:"id"`
+	Id              FlexID         `json:"id"`
 	Orderindex      string         `json:"orderindex"`
 	Parent          any            `json:"parent"`
 	Sharing         Sharing        `json:"sharing"`
@@ -93,7 +126,7 @@ type Task struct {
 	Space           SpaceLocation  `json:"space"`
 	StartDate       any            `json:"start_date"`
 	Tags            []any          `json:"tags"`
-	TeamId          string         `json:"team_id"`
+	TeamId          FlexID         `json:"team_id"`
 	Url             string         `json:"url"`
 	Watchers        []Watcher      `json:"watchers"`
 	CustomFields    []CustomField  `json:"custom_fields"`
@@ -125,7 +158,7 @@ type Task struct {
 // user types
 
 type User struct {
-	ID                int64  `json:"id"`
+	ID                FlexID `json:"id"`
 	Username          string `json:"username"`
 	Email             string `json:"email"`
 	Color             string `json:"color"`
@@ -141,7 +174,7 @@ type Member struct {
 }
 
 type WorkspaceUser struct {
-	ID             int    `json:"id"`
+	ID             FlexID `json:"id"`
 	Username       string `json:"username"`
 	Color          string `json:"color"`
 	ProfilePicture string `json:"profilePicture"`
@@ -152,7 +185,7 @@ type SpaceMember struct {
 }
 
 type SpaceUser struct {
-	ID             string `json:"id"`
+	ID             FlexID `json:"id"`
 	Username       string `json:"username"`
 	Color          string `json:"color"`
 	ProfilePicture string `json:"profilePicture"`
@@ -160,7 +193,7 @@ type SpaceUser struct {
 }
 
 type Watcher struct {
-	Id             int    `json:"id"`
+	Id             FlexID `json:"id"`
 	Initials       string `json:"initials"`
 	ProfilePicture any    `json:"profilePicture"`
 	Username       string `json:"username"`
@@ -201,7 +234,7 @@ type DueDatesFeature struct {
 }
 
 type SpaceLocation struct {
-	Id string `json:"id"`
+	Id FlexID `json:"id"`
 }
 
 type Status struct {
@@ -209,12 +242,12 @@ type Status struct {
 	Status     string `json:"status"`
 	Type       string `json:"type"`
 	Color      string `json:"color"`
-	Id         string `json:"id"`
+	Id         FlexID `json:"id"`
 }
 
 type ListLocation struct {
 	Access bool   `json:"access"`
-	Id     string `json:"id"`
+	Id     FlexID `json:"id"`
 	Name   string `json:"name"`
 }
 
@@ -238,11 +271,11 @@ type CustomField struct {
 	TypeConfig     TypeConfig `json:"type_config"`
 	DateCreated    string     `json:"date_created"`
 	HideFromGuests bool       `json:"hide_from_guests"`
-	Id             string     `json:"id"`
+	Id             FlexID     `json:"id"`
 }
 
 type Project struct {
-	Id     string `json:"id"`
+	Id     FlexID `json:"id"`
 	Name   string `json:"name"`
 	Access bool   `json:"access"`
 	Hidden bool   `json:"hidden"`
@@ -251,7 +284,7 @@ type Project struct {
 type Creator struct {
 	Color          string `json:"color"`
 	Email          string `json:"email"`
-	Id             int    `json:"id"`
+	Id             FlexID `json:"id"`
 	ProfilePicture any    `json:"profilePicture"`
 	Username       string `json:"username"`
 }
@@ -260,7 +293,7 @@ type FolderLocation struct {
 	Name   string `json:"name"`
 	Access bool   `json:"access"`
 	Hidden bool   `json:"hidden"`
-	Id     string `json:"id"`
+	Id     FlexID `json:"id"`
 }
 
 type TypeConfig struct{}

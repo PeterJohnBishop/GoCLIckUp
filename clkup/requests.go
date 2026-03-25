@@ -2,36 +2,35 @@ package clkup
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"sync"
-	"time"
 
-	"golang.org/x/time/rate"
+	"sync/atomic"
+	"time"
 )
 
-func calculatePerformance(totalTasks int, start time.Time) Performance {
-	elapsed := time.Since(start)
-	pages := float64(totalTasks) / 100.0
-	if pages < 1 {
-		pages = 1
-	}
+// func calculatePerformance(totalTasks int, start time.Time) Performance {
+// 	elapsed := time.Since(start)
+// 	pages := float64(totalTasks) / 100.0
+// 	if pages < 1 {
+// 		pages = 1
+// 	}
 
-	rpm := (pages / elapsed.Minutes())
-	tps := float64(totalTasks) / elapsed.Seconds()
+// 	rpm := (pages / elapsed.Minutes())
+// 	tps := float64(totalTasks) / elapsed.Seconds()
 
-	return Performance{
-		Duration: elapsed.Round(time.Millisecond).String(),
-		RPM:      fmt.Sprintf("%.2f", rpm),
-		TPS:      fmt.Sprintf("%.2f", tps),
-	}
-}
+// 	return Performance{
+// 		Duration: elapsed.Round(time.Millisecond).String(),
+// 		RPM:      fmt.Sprintf("%.2f", rpm),
+// 		TPS:      fmt.Sprintf("%.2f", tps),
+// 	}
+// }
 
-// oauth
+// OAUTH
 
 func GetAccessToken(code string) (string, error) {
 	client_id := os.Getenv("CLIENT_ID")
@@ -42,7 +41,8 @@ func GetAccessToken(code string) (string, error) {
 	reqData := map[string]string{
 		"client_id":     client_id,
 		"client_secret": client_secret,
-		"code":          code}
+		"code":          code,
+	}
 
 	jsonData, err := json.Marshal(reqData)
 	if err != nil {
@@ -61,19 +61,27 @@ func GetAccessToken(code string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	defer res.Body.Close()
+
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return "", err
 	}
 
-	return string(body), nil
+	var tokenResponse struct {
+		AccessToken string `json:"access_token"`
+	}
+
+	if err := json.Unmarshal(body, &tokenResponse); err != nil {
+		return "", fmt.Errorf("failed to parse token response: %w", err)
+	}
+
+	return tokenResponse.AccessToken, nil
 }
 
-// user
+// API methods
 
-func GetAuthorizedUser(token string) (User, error) {
+func (c *APIClient) GetAuthorizedUser() (User, error) {
 	url := "https://api.clickup.com/api/v2/user"
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -81,11 +89,7 @@ func GetAuthorizedUser(token string) (User, error) {
 		return User{}, err
 	}
 
-	req.Header.Add("Authorization", token)
-	req.Header.Add("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return User{}, err
 	}
@@ -103,21 +107,42 @@ func GetAuthorizedUser(token string) (User, error) {
 	return userResponse.User, nil
 }
 
-// workspace
+func (c *APIClient) GetPlan(teamID string) (PlanResponse, error) {
+	url := fmt.Sprintf("https://api.clickup.com/api/v2/team/%s/plan", teamID)
 
-func GetAuthorizedWorkspaces(token string) ([]Workspace, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return PlanResponse{}, err
+	}
 
+	// Uses the centralized client so headers are injected automatically
+	resp, err := c.Do(req)
+	if err != nil {
+		return PlanResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return PlanResponse{}, fmt.Errorf("API request failed with status: %d", resp.StatusCode)
+	}
+
+	var planResponse PlanResponse
+	if err := json.NewDecoder(resp.Body).Decode(&planResponse); err != nil {
+		return PlanResponse{}, fmt.Errorf("failed to decode JSON: %w", err)
+	}
+
+	return planResponse, nil
+}
+
+func (c *APIClient) GetAuthorizedWorkspaces() ([]Workspace, error) {
 	url := "https://api.clickup.com/api/v2/team"
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Add("Authorization", token)
-	req.Header.Add("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +150,6 @@ func GetAuthorizedWorkspaces(token string) ([]Workspace, error) {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("API request failed with status: %d", resp.StatusCode)
-
 	}
 
 	var teamsResponse TeamsResponse
@@ -136,21 +160,15 @@ func GetAuthorizedWorkspaces(token string) ([]Workspace, error) {
 	return teamsResponse.Teams, nil
 }
 
-// space
-
-func GetSpaces(token string, teamID string) ([]Space, error) {
-
+func (c *APIClient) GetSpaces(teamID string) ([]Space, error) {
 	url := fmt.Sprintf("https://api.clickup.com/api/v2/team/%s/space", teamID)
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Add("Authorization", token)
-	req.Header.Add("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -167,9 +185,7 @@ func GetSpaces(token string, teamID string) ([]Space, error) {
 	return spaceResponse.Spaces, nil
 }
 
-// folder
-
-func GetFolders(token string, spaceID string) ([]Folder, error) {
+func (c *APIClient) GetFolders(spaceID string) ([]Folder, error) {
 	url := fmt.Sprintf("https://api.clickup.com/api/v2/space/%s/folder", spaceID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -177,11 +193,7 @@ func GetFolders(token string, spaceID string) ([]Folder, error) {
 		return nil, err
 	}
 
-	req.Header.Add("Authorization", token)
-	req.Header.Add("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -199,9 +211,7 @@ func GetFolders(token string, spaceID string) ([]Folder, error) {
 	return foldersResponse.Folders, nil
 }
 
-// folderless list
-
-func GetFolderlessLists(token string, spaceID string) ([]List, error) {
+func (c *APIClient) GetFolderlessLists(spaceID string) ([]List, error) {
 	url := fmt.Sprintf("https://api.clickup.com/api/v2/space/%s/list", spaceID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -209,11 +219,7 @@ func GetFolderlessLists(token string, spaceID string) ([]List, error) {
 		return nil, err
 	}
 
-	req.Header.Add("Authorization", token)
-	req.Header.Add("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -231,9 +237,7 @@ func GetFolderlessLists(token string, spaceID string) ([]List, error) {
 	return listsResponse.Lists, nil
 }
 
-// list
-
-func GetLists(token string, folderID string) ([]List, error) {
+func (c *APIClient) GetLists(folderID string) ([]List, error) {
 	url := fmt.Sprintf("https://api.clickup.com/api/v2/folder/%s/list", folderID)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -241,11 +245,7 @@ func GetLists(token string, folderID string) ([]List, error) {
 		return nil, err
 	}
 
-	req.Header.Add("Authorization", token)
-	req.Header.Add("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -263,18 +263,19 @@ func GetLists(token string, folderID string) ([]List, error) {
 	return listsResponse.Lists, nil
 }
 
-// task
+// concurrent task fetching
 
-func GetAllTasks(teamID string, token string) ([]Task, error) {
+func (c *APIClient) GetAllTasks(teamID string) ([]Task, error) {
 	var allTasks []Task
 	var wg sync.WaitGroup
-
-	limiter := rate.NewLimiter(rate.Every(time.Minute/1000), 1)
+	var fetchErr error
+	var errMu sync.Mutex
 
 	taskChan := make(chan []Task, 100)
+	sem := make(chan struct{}, 20)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Use an atomic flag instead of a context cancel to stop the loop safely
+	var done int32
 
 	go func() {
 		for tasks := range taskChan {
@@ -282,64 +283,77 @@ func GetAllTasks(teamID string, token string) ([]Task, error) {
 		}
 	}()
 
-	// fmt.Println("starting concurrent fetch...")
-	start := time.Now()
+	// start := time.Now()
 
 	for page := 0; ; page++ {
-		select {
-		case <-ctx.Done():
-			goto WaitAndFinish
-		default:
-		}
-
-		if err := limiter.Wait(context.Background()); err != nil {
+		// Stop firing new requests if a previous goroutine hit the end
+		if atomic.LoadInt32(&done) == 1 {
 			break
 		}
 
+		sem <- struct{}{}
 		wg.Add(1)
+
 		go func(p int) {
 			defer wg.Done()
+			defer func() { <-sem }()
 
-			tasks, err := fetchPage(teamID, token, p)
-			if err != nil || len(tasks) == 0 {
-				cancel()
+			tasks, err := c.fetchPage(teamID, p)
+
+			if err != nil {
+				errMu.Lock()
+				fetchErr = err
+				errMu.Unlock()
+				atomic.StoreInt32(&done, 1) // Stop the loop
+				return
+			}
+
+			if len(tasks) == 0 {
+				atomic.StoreInt32(&done, 1) // Reached the last page
 				return
 			}
 
 			taskChan <- tasks
 		}(page)
-
 	}
 
-WaitAndFinish:
 	wg.Wait()
 	close(taskChan)
+	time.Sleep(100 * time.Millisecond) // Let the append channel flush
 
-	time.Sleep(100 * time.Millisecond)
+	// If any of the page requests failed, bubble that error up!
+	if fetchErr != nil {
+		return nil, fetchErr
+	}
 
-	performance := calculatePerformance(len(allTasks), start)
-	fmt.Printf("fetched %d tasks in %s seconds. RPM: %s\n",
-		len(allTasks), performance.Duration, performance.RPM)
+	// performance := calculatePerformance(len(allTasks), start)
+	// fmt.Printf("fetched %d tasks in %s seconds. RPM: %s\n",
+	// 	len(allTasks), performance.Duration, performance.RPM)
 
 	return allTasks, nil
 }
 
-func fetchPage(teamID string, token string, page int) ([]Task, error) {
+// Notice we removed 'ctx'. We don't want an empty page cancelling
+// the HTTP requests of the pages that have actual data.
+func (c *APIClient) fetchPage(teamID string, page int) ([]Task, error) {
 	url := fmt.Sprintf("https://api.clickup.com/api/v2/team/%s/task?page=%d&include_closed=true&subtasks=true", teamID, page)
 
-	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Add("Authorization", token)
-	req.Header.Add("Content-Type", "application/json")
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		return nil, fmt.Errorf("rate limit hit")
+		return nil, fmt.Errorf("rate limit hit on page %d", page)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("api request failed with status: %d", resp.StatusCode)
 	}
 
 	var tasksResponse TasksResponse
