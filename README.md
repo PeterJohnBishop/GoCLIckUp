@@ -7,6 +7,7 @@
 - Once a Workspace is selected, I use a concurrent fan-out approach in Go to fetch the Workspace data. I trigger two parallel streams: one drills down the Workspace hierarchy (Spaces to Folders to Lists) generating separate Goroutines for every request, while the other concurrently paginates through all of the task requests. Mutex locks prevent data overwrites on the final data stores.
 
 - Navigate with H J K L
+- space or enter to select
 - o to open selection in ClickUp
 - q to quit
 
