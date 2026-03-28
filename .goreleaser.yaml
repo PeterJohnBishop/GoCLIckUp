@@ -56,7 +56,8 @@ brews:
   - name: goclicu
     repository:
       owner: PeterJohnBishop
-      name: goclicu
+      name: homebrew-tap
+      branch: main
     directory: Formula
     homepage: "https://github.com/PeterJohnBishop/goclicu"
     description: "A blazing fast terminal UI for ClickUp."
