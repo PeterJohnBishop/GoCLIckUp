@@ -51,3 +51,17 @@ release:
     ---
 
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
+
+brews:
+  - name: goclickup
+    repository:
+      owner: PeterJohnBishop
+      name: homebrew-tap
+    directory: Formula
+    homepage: "https://github.com/PeterJohnBishop/GoCLIckUp"
+    description: "A blazing fast terminal UI for ClickUp."
+    license: "MIT" # Update this if you are using a different license
+
+    # This tells Homebrew how to test that the installation worked
+    test: |
+      system "#{bin}/goclickup --version"
