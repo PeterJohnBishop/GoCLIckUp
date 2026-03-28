@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"goclicu/clkup"
+	"os"
+	"path/filepath"
 
 	_ "modernc.org/sqlite"
 )
@@ -320,4 +322,18 @@ func (db *DB) GetMasterCustomField(id string) *clkup.CustomField {
 	var cf clkup.CustomField
 	json.Unmarshal([]byte(raw), &cf)
 	return &cf
+}
+
+func GetDBPath() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "local_cache.db"
+	}
+
+	appDir := filepath.Join(configDir, "goclicu")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		return "local_cache.db"
+	}
+
+	return filepath.Join(appDir, "local_cache.db")
 }

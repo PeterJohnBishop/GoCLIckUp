@@ -22,7 +22,8 @@ var dblite *sql.DB
 var err error
 
 func main() {
-	db, err := dbstore.InitDB("dbstore/local_cache.db")
+	path := dbstore.GetDBPath()
+	db, err := dbstore.InitDB(path)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
